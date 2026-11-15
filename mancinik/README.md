@@ -15,5 +15,5 @@ Adres: https://hssyn53.github.io/mancinik/
 
 `config.js` boşken oyun yine çalışır; skorlar sadece oyuncunun kendi tarayıcısında tutulur.
 
-Not: Skorlar tarayıcıdan gönderildiği için meraklı biri sahte skor yollayabilir. Tablo 0–2000 arası
+Not: Skorlar tarayıcıdan gönderildiği için meraklı biri sahte skor yollayabilir. Tablo 0–100.000 arası
 skor ve 2–16 karakter ad kabul eder; istenmeyen satırlar Supabase panelindeki Table Editor'den silinebilir.
