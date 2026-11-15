@@ -226,8 +226,7 @@ const SECTIONS=[
   {k:'mass',l:'Mermi kütlesi',u:'kg',min:5,max:300,step:1,d:0},
   {k:'material',l:'Malzeme',select:Object.entries(MATERIALS).map(([v,m])=>[v,m.name])}],
   note:'Çap, kütle ve malzeme yoğunluğundan hesaplanır; hava direncini etkiler.'},
- {title:'Ortam',kind:'env',chips:[['Ay',1.62],['Mars',3.71],['Dünya',9.81],['Jüpiter',24.8]],items:[
-  {k:'gravity',l:'Yerçekimi',u:'m/s²',min:1,max:25,step:.01,d:2},
+ {title:'Ortam',kind:'env',items:[
   {k:'wind',l:'Rüzgâr hızı',u:'m/s',min:0,max:30,step:.5,d:1},
   {k:'windDir',l:'Rüzgâr yönü (0° = hedefe doğru)',u:'°',min:0,max:355,step:5,d:0},
   {k:'drag',l:'Hava direnci',check:true}]},
