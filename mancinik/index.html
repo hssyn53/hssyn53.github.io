@@ -146,10 +146,9 @@ details[inert] summary::before{content:"Görevde kilitli · ";font-weight:500;co
   </div>
   <div id="mission">
     <button id="who" type="button" title="Adı değiştir"></button>
-    <span><span class="lbl">Atış</span> <span class="mnum" id="mShots">–</span></span>
-    <span><span class="lbl">Puan</span> <span class="mnum" id="mScore">–</span></span>
-    <button class="btn primary" id="mStart" type="button">Görevi başlat</button>
-    <p class="note" id="mInfo"></p>
+    <span><span class="lbl">Son atış</span> <span class="mnum" id="mLast">–</span></span>
+    <span><span class="lbl">En iyi</span> <span class="mnum" id="mBest">–</span></span>
+    <p class="note" id="mInfo">Her atış sıralamaya girer; sıralamada en uzak atışın sayılır.</p>
   </div>
 </section>
 <div id="toast" class="card float" hidden></div>
@@ -158,24 +157,13 @@ details[inert] summary::before{content:"Görevde kilitli · ";font-weight:500;co
   <form class="card dialog" id="gateForm" novalidate>
     <span class="lbl">Kuşatma görevi</span>
     <h1>Mancınık Atölyesi</h1>
-    <p class="note">Her görevde 5 atışın var. Hedefin yeri, türü ve rüzgâr rastgele gelir; mancınığı ayarlayıp hedefi yık. Devrilen her blok 10 puan, hedefe 20 m'den yakın düşen atış 30 puana kadar isabet bonusu.</p>
+    <p class="note">Adını yaz ve fırlatmaya başla. Her atış sıralamaya girer; en uzak atışın sayılır.</p>
     <label class="lbl" for="nameIn">Adın</label>
     <input id="nameIn" type="text" maxlength="16" autocomplete="nickname" placeholder="2–16 karakter">
     <p id="nameErr" class="note err" hidden></p>
     <button class="btn primary big" type="submit">Oyuna gir</button>
     <div><div class="lbhead"><span class="lbl lbtitle">Sıralama</span></div><ol class="lb" id="lbGate"></ol></div>
   </form>
-</div>
-
-<div id="result" class="overlay" hidden>
-  <div class="card dialog" role="dialog" aria-labelledby="rTitle">
-    <span class="lbl" id="rTitle">Görev bitti</span>
-    <div class="big-score" id="rScore">0</div>
-    <p class="note" id="rDetail"></p>
-    <p id="rRank"></p>
-    <div><div class="lbhead"><span class="lbl lbtitle">Sıralama</span></div><ol class="lb" id="lbResult"></ol></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn primary big" id="rAgain" type="button">Yeni görev</button><button class="btn big" id="rClose" type="button">Serbest atış</button></div>
-  </div>
 </div>
 
 <div id="actions" class="float">
@@ -431,8 +419,7 @@ function launch(){
   cur.trail=line;trails.push(line);trails.forEach((t,i)=>t.material.opacity=i===trails.length-1?.95:.3);
   while(trails.length>5){const t=trails.shift();scene.remove(t);t.geometry.dispose();}
   const shot=cur;
-  if(G.active){G.shot++;G.pending={shot,t:null};renderMission();}
-  cur.body.addEventListener('collide',e=>{if(!shot.released||shot.landed)return;shot.landed=true;const p=shot.body.position;shot.land={x:p.x,z:p.z};
+  cur.body.addEventListener('collide',e=>{if(!shot.released||shot.landed)return;shot.landed=true;const p=shot.body.position;shot.land={x:p.x,z:p.z};onLand(p);
     if(shot===cur){stats.r=Math.hypot(p.x,p.z);stats.t=simT-shot.tRel;}
     addMarker(p.x,p.z,Math.hypot(p.x,p.z));shot.body.allowSleep=true;shot.body.angularDamping=.35;});
   Object.keys(stats).forEach(k=>stats[k]=null);
@@ -499,8 +486,8 @@ function sync(dt){
 }
 function setStatus(){const s=$('status'),f=$('fire');s.textContent=paused?'Duraklatıldı':state==='armed'?'Kurulu':state==='flying'?'Uçuşta':'İndi';s.classList.toggle('live',state==='flying'&&!paused);
   f.textContent=state==='armed'?'Fırlat':'Yeniden kur';f.classList.toggle('reload',state!=='armed');}
-function fireOrReload(){if(!$('gate').hidden||!$('result').hidden)return;if(G.active&&(G.pending||(state==='armed'&&G.shot>=MISSION_SHOTS)))return;if(state==='armed')launch();else{buildMachine();if(followed){followed=false;viewMachine();}}}
-function resetField(){if(G.active&&!G.starting)return;for(const s of shots){world.removeBody(s.body);scene.remove(s.mesh);s.mesh.geometry.dispose();}shots.length=0;
+function fireOrReload(){if(!$('gate').hidden)return;if(state==='armed')launch();else{buildMachine();if(followed){followed=false;viewMachine();}}}
+function resetField(){for(const s of shots){world.removeBody(s.body);scene.remove(s.mesh);s.mesh.geometry.dispose();}shots.length=0;
   for(const t of trails){scene.remove(t);t.geometry.dispose();}trails.length=0;while(markers.length)killMarker(markers.pop());
   Object.keys(stats).forEach(k=>stats[k]=null);buildTargets();buildMachine();}
 function viewMachine(){flyTo(2,0,Math.max(18,P.pivotH*2.2+P.longArm*1.6));}
@@ -549,22 +536,22 @@ addEventListener('keydown',e=>{if(e.target.type==='text'||/SELECT|TEXTAREA/.test
   if(e.code==='Space'){e.preventDefault();fireOrReload();}else if(e.key==='r'||e.key==='R')resetField();else if(e.key==='p'||e.key==='P')$('pause').click();
   else if(e.key==='+'||e.key==='=')zoom(.8);else if(e.key==='-')zoom(1.25);});
 
-/* ---------- mission + leaderboard ---------- */
-const MISSION_SHOTS=5,TARGET_NAMES={wall:'sur duvarı',tower:'kule',pyramid:'piramit'};
-const G={active:false,starting:false,shot:0,score:0,pending:null,log:[],blocksDown:0,counted:new Set(),name:''};
+/* ---------- free-fire ranking ---------- */
 const CFG=window.MANCINIK_CONFIG||{},SB_URL=(CFG.supabaseUrl||'').replace(/\/+$/,''),SB_KEY=CFG.supabaseKey||'',REMOTE=!!(SB_URL&&SB_KEY);
 const LS_SCORES='mancinik.scores.v1',LS_NAME='mancinik.name';
+const G={name:'',log:[]};
 const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
 const sbHeaders=()=>{const h={apikey:SB_KEY};if(/^eyJ/.test(SB_KEY))h.Authorization='Bearer '+SB_KEY;return h;};
 const nameKey=n=>n.toLocaleLowerCase('tr-TR');
 let lbRows=[],lbError=null;
+let toastT=0;function toast(html){const t=$('toast');t.innerHTML=html;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600);}
 async function lbLoad(){
   try{let rows;
     if(REMOTE){const r=await fetch(SB_URL+'/rest/v1/scores?select=name,score,created_at&order=score.desc,created_at.asc&limit=500',{headers:sbHeaders()});if(!r.ok)throw new Error('HTTP '+r.status);rows=await r.json();}
     else rows=lsGet(LS_SCORES,[]).slice().sort((a,b)=>b.score-a.score);
     const seen=new Set();lbRows=[];for(const x of rows){const k=nameKey(x.name);if(seen.has(k))continue;seen.add(k);lbRows.push(x);}lbError=null;
-  }catch(e){lbError='Sıralama yüklenemedi ('+e.message+'). İnternet bağlantını kontrol edip Yenile\'ye bas.';}
+  }catch(e){lbError='Sıralama yüklenemedi ('+e.message+'). Yenile\'ye basıp tekrar dene.';}
   renderLB();
 }
 async function lbSubmit(name,score){
@@ -574,61 +561,34 @@ async function lbSubmit(name,score){
 function myRank(){const k=nameKey(G.name);const i=lbRows.findIndex(r=>nameKey(r.name)===k);return i<0?null:{rank:i+1,row:lbRows[i]};}
 function renderLB(){
   for(const el of document.querySelectorAll('.lbtitle'))el.textContent=REMOTE?'Sıralama · herkes':'Sıralama · yalnızca bu tarayıcı';
-  for(const id of ['lbGate','lbPanel','lbResult']){const ol=$(id);if(!ol)continue;ol.textContent='';
+  for(const id of ['lbGate','lbPanel']){const ol=$(id);if(!ol)continue;ol.textContent='';
     if(lbError){const li=document.createElement('li');li.className='gap';li.textContent=lbError;ol.appendChild(li);continue;}
-    if(!lbRows.length){const li=document.createElement('li');li.className='gap';li.textContent='Henüz skor yok. İlk görevi sen tamamla.';ol.appendChild(li);continue;}
+    if(!lbRows.length){const li=document.createElement('li');li.className='gap';li.textContent='Henüz atış yok. İlk atışı sen yap.';ol.appendChild(li);continue;}
     const me=myRank(),add=(r,rank)=>{const li=document.createElement('li');if(me&&rank===me.rank)li.className='me';
-      const a=document.createElement('span');a.className='rk';a.textContent=rank+'.';const b=document.createElement('span');b.className='nm';b.textContent=r.name;const c=document.createElement('span');c.className='sc';c.textContent=r.score;li.append(a,b,c);ol.appendChild(li);};
+      const a=document.createElement('span');a.className='rk';a.textContent=rank+'.';const b=document.createElement('span');b.className='nm';b.textContent=r.name;const c=document.createElement('span');c.className='sc';c.textContent=r.score+' m';li.append(a,b,c);ol.appendChild(li);};
     lbRows.slice(0,10).forEach((r,i)=>add(r,i+1));
     if(me&&me.rank>10){const g=document.createElement('li');g.className='gap';g.textContent='⋯';ol.appendChild(g);add(me.row,me.rank);}
   }
+  renderMission();
 }
-function lockPanel(on){for(const d of document.querySelectorAll('#panelBody details[data-kind="env"],#panelBody details[data-kind="target"]')){if(on)d.setAttribute('inert','');else d.removeAttribute('inert');}$('reset').disabled=on;}
 function renderMission(){
   $('who').textContent=G.name||'Adını yaz';
-  $('mShots').textContent=G.active?Math.min(G.shot,MISSION_SHOTS)+' / '+MISSION_SHOTS:'–';
-  $('mScore').textContent=G.active?G.score:'–';
-  $('mStart').textContent=G.active?'Görevi bırak':'Görevi başlat';
-  const wdir=['hedefe doğru','sağdan','karşıdan','soldan'][Math.round(((P.windDir%360)+360)%360/90)%4];
-  $('mInfo').textContent=G.active?('Hedef: '+fmt(P.dist,0)+' m ötede '+TARGET_NAMES[P.target]+' · Rüzgâr: '+(P.wind>0?fmt(P.wind,1)+' m/s, '+wdir:'yok')+(G.log.length?' · Atışlar: '+G.log.join(' + '):'')):'Serbest atış: her ayar açık, puan sayılmaz.';
+  $('mLast').textContent=G.log.length?G.log[0]+' m':'–';
+  const me=myRank();$('mBest').textContent=me?me.row.score+' m':'–';
 }
-let toastT=0;function toast(html){const t=$('toast');t.innerHTML=html;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200);}
-function startMission(){
-  if(!G.name){showGate();return;}
-  Object.assign(P,{gravity:9.81,drag:true,blockMass:50,target:['wall','tower','pyramid'][Math.floor(Math.random()*3)],
-    dist:5*Math.round((60+Math.random()*160)/5),wind:Math.round(Math.random()*20)/2,windDir:5*Math.floor(Math.random()*72)});
-  world.gravity.set(0,-P.gravity,0);['gravity','drag','blockMass','target','dist','wind','windDir'].forEach(show);
-  Object.assign(G,{active:true,starting:true,shot:0,score:0,pending:null,log:[],blocksDown:0,counted:new Set()});
-  resetField();G.starting=false;lockPanel(true);renderMission();viewAll();
-  toast('Görev başladı: <b>'+fmt(P.dist,0)+' m</b> ötede '+TARGET_NAMES[P.target]);
-}
-function stopMission(){G.active=false;G.pending=null;lockPanel(false);renderMission();}
-function missionTick(){
-  const p=G.pending;if(!G.active||!p||state!=='done')return;
-  if(p.t==null)p.t=simT;if(simT-p.t<2)return;
-  G.pending=null;let down=0;
-  blocks.forEach((b,i)=>{if(G.counted.has(i))return;const q=b.body.position;if(Math.hypot(q.x-b.p0.x,q.y-b.p0.y,q.z-b.p0.z)>.35){G.counted.add(i);down++;}});
-  const L=p.shot.land,d=L?Math.hypot(L.x-P.dist,L.z):1e9,bonus=Math.max(0,Math.round(30*(1-d/20))),pts=down*10+bonus;
-  G.score+=pts;G.blocksDown+=down;G.log.push(pts);renderMission();
-  toast('Atış '+G.shot+': <b>+'+pts+'</b> · '+down+' blok'+(bonus?' · isabet +'+bonus:(L?' · hedefe '+fmt(Math.abs(d),0)+' m':'')));
-  if(G.shot>=MISSION_SHOTS)setTimeout(endMission,1200);
-}
-async function endMission(){
-  const score=G.score,blocksDown=G.blocksDown,log=G.log.slice();stopMission();
-  $('rScore').textContent=score+' puan';$('rDetail').textContent=G.name+' · '+blocksDown+' blok devrildi · atışlar: '+log.join(' + ');
-  $('rRank').textContent='Skor kaydediliyor…';$('result').hidden=false;
-  try{await lbSubmit(G.name,score);await lbLoad();const me=myRank();
-    $('rRank').textContent=me?(me.row.score>score?'En iyi skorun '+me.row.score+'; sıralamada '+me.rank+'. sıradasın.':'Sıralamada '+me.rank+'. sıradasın.'):'Skor kaydedildi.';}
-  catch(e){$('rRank').textContent='Skor kaydedilemedi ('+e.message+'). Bağlantını kontrol et.';}
+function onLand(p){
+  const d=Math.round(Math.hypot(p.x,p.z));
+  G.log.unshift(d);G.log.length=Math.min(G.log.length,10);
+  renderMission();
+  if(!G.name)return;
+  toast('Atış: <b>'+d+' m</b>');
+  lbSubmit(G.name,d).then(()=>lbLoad()).catch(e=>toast('Skor kaydedilemedi: '+e.message));
 }
 function showGate(){$('nameIn').value=G.name||lsGet(LS_NAME,'')||'';$('gate').hidden=false;setTimeout(()=>$('nameIn').focus(),50);}
 $('gateForm').addEventListener('submit',e=>{e.preventDefault();const n=$('nameIn').value.replace(/\s+/g,' ').trim(),err=$('nameErr');
   if(n.length<2||n.length>16){err.textContent='Ad 2 ile 16 karakter arasında olmalı.';err.hidden=false;return;}
-  err.hidden=true;G.name=n;lsSet(LS_NAME,n);$('gate').hidden=true;$('hint').hidden=!matchMedia('(min-width:821px)').matches;renderMission();renderLB();if(!G.active)startMission();});
-$('who').onclick=()=>{if(!G.active)showGate();};
-$('mStart').onclick=()=>{if(G.active)stopMission();else startMission();};
-$('rAgain').onclick=()=>{$('result').hidden=true;startMission();};
-$('rClose').onclick=()=>{$('result').hidden=true;};
+  err.hidden=true;G.name=n;lsSet(LS_NAME,n);$('gate').hidden=true;$('hint').hidden=!matchMedia('(min-width:821px)').matches;renderMission();renderLB();});
+$('who').onclick=showGate;
 $('lbRefresh').onclick=lbLoad;
 setInterval(()=>{if(!document.hidden)lbLoad();},60000);
 renderMission();lbLoad();showGate();
@@ -641,7 +601,7 @@ let last=performance.now(),acc=0;
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
   if(!paused){acc+=dt*P.timeScale;let n=0;while(acc>=DT&&n<24){step();acc-=DT;n++;}if(n===24)acc=0;}
-  missionTick();sync(dt);updateCamera();renderer.render(scene,camera);requestAnimationFrame(frame);
+  sync(dt);updateCamera();renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 window.__sim={blocks,G,P,stats,launch,step,buildMachine,get state(){return state},get machine(){return machine},get cur(){return cur}};
