@@ -206,9 +206,10 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const DT=1/240, GRP={GROUND:1,TARGET:2,PROJ:4,MACHINE:8};
 
 /* ---------- parameters ---------- */
+const GRAVITY=9.81; // sabit Dünya çekimi (m/s²), değiştirilemez
 const P={cw:2000,longArm:7,shortArm:1.7,sling:5.5,pivotH:6,release:42,yaw:0,
   mass:5,material:'iron',
-  gravity:9.81,drag:true,wind:0,windDir:0,
+  drag:true,wind:0,windDir:0,
   target:'wall',dist:100,blockMass:150,
   timeScale:1,follow:true,trail:true};
 const MATERIALS={stone:{name:'Taş gülle',rho:2600,color:0x8d8f8a},iron:{name:'Demir gülle',rho:7800,color:0x3b3f46},wood:{name:'Meşe kütük topu',rho:750,color:0x9a6b3c}};
@@ -420,7 +421,7 @@ function release(silent){
   const c=cur;if(!c||c.released)return;c.released=true;c.tRel=simT;world.removeConstraint(machine.ropeC);machine.rope.visible=false;
   if(silent)return;
   const v=c.body.velocity,a=P.yaw*Math.PI/180,vf=v.x*Math.cos(a)-v.z*Math.sin(a),sp=v.norm();
-  stats.v=sp;stats.a=Math.atan2(v.y,vf)*180/Math.PI;stats.e=.5*P.mass*sp*sp/(P.cw*P.gravity*machine.drop);
+  stats.v=sp;stats.a=Math.atan2(v.y,vf)*180/Math.PI;stats.e=.5*P.mass*sp*sp/(P.cw*GRAVITY*machine.drop);
 }
 function addMarker(x,z,d){
   const g=new THREE.Group();const ring=new THREE.Mesh(new THREE.RingGeometry(.7,1,24),new THREE.MeshBasicMaterial({color:0xfff3c4,transparent:true,opacity:.9,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.06;g.add(ring);
@@ -507,14 +508,13 @@ function show(k){const it=ITEMS[k],el=$('c_'+k);if(it.check)el.checked=P[k];else
 function changed(k){const kind=kindOf[k];
   if(kind==='machine'){if(state==='armed')buildMachine();}
   else if(kind==='target')buildTargets();
-  else if(k==='gravity')world.gravity.set(0,-P.gravity,0);
   else if(k==='trail')trails.forEach(t=>t.visible=P.trail);
   else if(k==='follow')userMoved=false;}
 Object.keys(ITEMS).forEach(k=>{const it=ITEMS[k],el=$('c_'+k);show(k);
   el.addEventListener(it.check||it.select?'change':'input',()=>{P[k]=it.check?el.checked:it.select?el.value:parseFloat(el.value);show(k);changed(k);});});
 $('panelBody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.preset){Object.assign(P,SECTIONS[0].presets[+b.dataset.preset][1]);Object.keys(ITEMS).forEach(show);if(state!=='armed'){state='armed';}buildMachine();viewMachine();}
-  if(b.dataset.g){P.gravity=+b.dataset.g;show('gravity');changed('gravity');}});
+  });
 $('fire').onclick=fireOrReload;$('reset').onclick=resetField;
 $('pause').onclick=()=>{paused=!paused;$('pause').setAttribute('aria-pressed',paused);$('pause').textContent=paused?'Devam':'Duraklat';setStatus();};
 $('zIn').onclick=()=>zoom(.75);$('zOut').onclick=()=>zoom(1/.75);$('rotL').onclick=()=>rotate(-Math.PI/8,0);$('rotR').onclick=()=>rotate(Math.PI/8,0);
@@ -587,7 +587,7 @@ renderMission();lbLoad();showGate();
 /* ---------- loop ---------- */
 function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setSize(w,h,false);}
 addEventListener('resize',resize);resize();
-world.gravity.set(0,-P.gravity,0);buildTargets();buildMachine();viewMachine();cam.size=cam.goal.size;cam.goal=null;
+world.gravity.set(0,-GRAVITY,0);buildTargets();buildMachine();viewMachine();cam.size=cam.goal.size;cam.goal=null;
 let last=performance.now(),acc=0;
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
