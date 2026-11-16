@@ -341,6 +341,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
+(function () {
 // ================= Ayarlar =================
 const H = 5;                 // küpün yarı kenarı; her yüz 10 x 10 hücre
 const ROUND = 0.55;          // küp köşe yuvarlaklığı
@@ -3518,6 +3519,7 @@ function start() {
   closeMissions();
   rng = mode === 'daily' ? mulberry(todaySeed()) : Math.random;
   reset(false);
+  sbStart();
   showMenuUI(false);
   overEl.classList.add('hidden');
   pauseEl.classList.add('hidden');
@@ -4169,7 +4171,7 @@ function localSave(entry) {
 async function initBoard() {
   let db = null;
   try { if (window.claude && claude.use) db = await claude.use('db'); } catch (e) { db = null; }
-  if (!db) { localLoad(); return; }
+  if (!db) { initSB(); return; }
   LB.db = db;
   try { LB.user = await claude.use('user'); } catch (e) { LB.user = null; }
   try { LB.me = LB.user ? await LB.user.id() : null; } catch (e) { LB.me = null; }
@@ -4185,9 +4187,63 @@ async function initBoard() {
     renderBoard();
   });
 }
+
+// ---- Supabase paylaşımlı sıralama ----
+const SB_URL = 'https://zxktaigenwjuujrxgxis.supabase.co';
+const SB_KEY = 'sb_publishable_Fn_1mJ606qFJVD0WiRoOtw_exjMBJ9T';
+const SBH = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+function myId() {
+  try {
+    let i = localStorage.getItem('kupYilanId');
+    if (!i) { i = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); localStorage.setItem('kupYilanId', i); }
+    return i;
+  } catch (e) { return 'g' + Math.random().toString(36).slice(2); }
+}
+async function sbLoad() {
+  const r = await fetch(SB_URL + '/rest/v1/scores?select=id,data&limit=500', { headers: SBH });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const arr = await r.json();
+  LB.rows.clear();
+  arr.forEach(x => LB.rows.set(x.id, normEntry(x.data)));
+  LB.ready = true;
+  renderBoard();
+}
+function mySecret() {
+  try {
+    let k = localStorage.getItem('kupYilanKey');
+    if (!k) {
+      const a = new Uint8Array(24); crypto.getRandomValues(a);
+      k = Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('kupYilanKey', k);
+    }
+    return k;
+  } catch (e) { return ''; }
+}
+async function sbRpc(fn, args) {
+  const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: SBH, body: JSON.stringify(args) });
+  const txt = await r.text();
+  if (!r.ok) { let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {} throw new Error(m || ('HTTP ' + r.status)); }
+  return txt ? JSON.parse(txt) : null;
+}
+const SB = { tok: null, game: 0 };
+function sbStart() {
+  const g = ++SB.game; SB.tok = null;
+  if (LB.db !== 'sb') return;
+  sbRpc('start_run', { p_player: LB.me, p_secret: mySecret() })
+    .then(t => { if (SB.game === g) SB.tok = t; })
+    .catch(e => console.warn('tur başlatılamadı', e && e.message));
+}
+async function initSB() {
+  LB.db = 'sb'; LB.me = myId();
+  try { await sbLoad(); }
+  catch (e) { console.warn('Supabase okunamadı', e); LB.db = null; localLoad(); return; }
+  setInterval(() => { sbLoad().catch(() => {}); }, 30000);
+}
 let submitChain = Promise.resolve();
 function submitScore(p, l, f) {
   if (p <= 0 && l <= 3) return;
+  const st = { tok: SB.tok, g: run.gold, po: run.poison, t: run.tours, s: steps };
+  SB.tok = null;
   submitChain = submitChain.then(async () => {
     if (!LB.ready && !LB.local && LB.db) await new Promise(r => setTimeout(r, 1200));
     const prev = LB.rows.get(LB.me);
@@ -4195,6 +4251,21 @@ function submitScore(p, l, f) {
     if (LB.local || !LB.db) { localSave(entry); showOverRank(); return; }
     LB.rows.set(LB.me, entry);
     showOverRank();
+    if (LB.db === 'sb') {
+      try {
+        if (!st.tok) throw new Error('tur jetonu yok');
+        const d = await sbRpc('submit_run', { p_token: st.tok, p_player: LB.me, p_secret: mySecret(), p_nick: nick,
+          p_points: p, p_len: l, p_fruits: f, p_gold: st.g, p_poison: st.po, p_tours: st.t, p_steps: st.s });
+        if (d) LB.rows.set(LB.me, normEntry(d));
+        renderBoard(); showOverRank();
+      } catch (e) {
+        console.warn('skor kaydedilemedi', e && e.message);
+        LB.rows.set(LB.me, normEntry(prev));
+        renderBoard();
+        setTimeout(() => { if (state === 'dead') $('overRank').textContent = 'Skorun sıralamaya kaydedilemedi.'; }, 0);
+      }
+      return;
+    }
     try { await LB.db.collection('scores').doc(LB.me).set(entry); }
     catch (e) {
       console.warn('skor kaydedilemedi', e && e.code);
@@ -4283,11 +4354,13 @@ $('nick').addEventListener('input', () => {
     if (!e || e.ad === nick) return;
     const n = normEntry(e); n.ad = nick;
     if (LB.local) { localSave(n); return; }
-    if (LB.db && !LB.writeBlocked) { LB.rows.set(LB.me, n); LB.db.collection('scores').doc(LB.me).set(n).catch(() => {}); }
+    if (LB.db && !LB.writeBlocked) { LB.rows.set(LB.me, n); (LB.db === 'sb' ? sbRpc('set_nick', { p_player: LB.me, p_secret: mySecret(), p_nick: nick }) : LB.db.collection('scores').doc(LB.me).set(n)).catch(() => {}); }
   }, 900);
 });
 $('nick').addEventListener('keydown', e => e.stopPropagation());
 initBoard();
+
+})();
 </script>
 
 </body>
