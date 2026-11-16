@@ -207,7 +207,7 @@ const DT=1/240, GRP={GROUND:1,TARGET:2,PROJ:4,MACHINE:8};
 
 /* ---------- parameters ---------- */
 const P={cw:2000,longArm:7,shortArm:1.7,sling:5.5,pivotH:6,release:42,yaw:0,
-  mass:50,material:'stone',
+  mass:5,material:'stone',
   gravity:9.81,drag:true,wind:0,windDir:0,
   target:'wall',dist:100,blockMass:150,
   timeScale:1,follow:true,trail:true};
@@ -222,14 +222,6 @@ const SECTIONS=[
   {k:'pivotH',l:'Mil yüksekliği',u:'m',min:3,max:9,step:.1,d:1},
   {k:'release',l:'Bırakma açısı',u:'°',min:10,max:80,step:1,d:0},
   {k:'yaw',l:'Nişan yönü',u:'°',min:-20,max:20,step:.5,d:1}]},
- {title:'Mermi',open:true,kind:'machine',items:[
-  {k:'mass',l:'Mermi kütlesi',u:'kg',min:5,max:300,step:1,d:0},
-  {k:'material',l:'Malzeme',select:Object.entries(MATERIALS).map(([v,m])=>[v,m.name])}],
-  note:'Çap, kütle ve malzeme yoğunluğundan hesaplanır; hava direncini etkiler.'},
- {title:'Ortam',kind:'env',items:[
-  {k:'wind',l:'Rüzgâr hızı',u:'m/s',min:0,max:30,step:.5,d:1},
-  {k:'windDir',l:'Rüzgâr yönü (0° = hedefe doğru)',u:'°',min:0,max:355,step:5,d:0},
-  {k:'drag',l:'Hava direnci',check:true}]},
  {title:'Hedef',kind:'target',items:[
   {k:'target',l:'Yapı',select:[['wall','Sur duvarı'],['tower','Kule'],['pyramid','Piramit'],['none','Boş saha']]},
   {k:'dist',l:'Mesafe',u:'m',min:30,max:300,step:5,d:0},
@@ -603,7 +595,6 @@ function frame(now){
   sync(dt);updateCamera();renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__sim={blocks,G,P,stats,launch,step,buildMachine,get state(){return state},get machine(){return machine},get cur(){return cur}};
 })();
 </script>
 
